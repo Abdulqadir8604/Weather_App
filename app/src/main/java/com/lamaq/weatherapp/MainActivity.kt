@@ -83,10 +83,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val location : Location? = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        println(location)
         if (location != null) {
             cityName = getCityName(location.latitude, location.longitude)
+            println(cityName)
+        }else{
+            cityName = "Mumbai"
+            println("Not got city name")
         }
         cityName?.let { getWeatherDetails(it) }
+//        getWeatherDetails("mumbai")
 
         searchIV!!.setOnClickListener {
             cityName = cityEdt!!.text.toString()
@@ -141,11 +147,9 @@ class MainActivity : AppCompatActivity() {
         val jsonObjectRequest = JsonObjectRequest(Request.Method.GET, url, null,
             { response ->
 
-                loadingPB!!.visibility = View.GONE
-                homeRL!!.visibility = View.VISIBLE
                 val current = response.getJSONObject("current")
-                val condition = current.getJSONObject("condition")
                 val tempC = current.getString("temp_c")
+                val condition = current.getJSONObject("condition")
                 val icon = condition.getString("icon")
                 val text = condition.getString("text")
 
