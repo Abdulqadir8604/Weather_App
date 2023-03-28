@@ -10,13 +10,17 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.android.volley.Request
 import com.android.volley.Response
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
+import com.bumptech.glide.Glide
 import com.google.android.material.textfield.TextInputEditText
 import com.google.gson.JsonObject
 import org.json.JSONObject
@@ -61,6 +65,8 @@ class MainActivity : AppCompatActivity() {
         iconIV = findViewById(R.id.idIVIcon)
         searchIV = findViewById(R.id.idIVSearch)
 
+        val swipeRefreshLayout = findViewById<SwipeRefreshLayout>(R.id.swipe_refresh_layout)
+
         weatherRVModelArrayList = ArrayList()
         weatherRVAdapter = WeatherRVAdapter(this, weatherRVModelArrayList!!)
         weatherRV!!.adapter = weatherRVAdapter
@@ -86,30 +92,65 @@ class MainActivity : AppCompatActivity() {
         println(location)
         if (location != null) {
             cityName = getCityName(location.latitude, location.longitude)
-            println(cityName)
         }else{
             cityName = "Mumbai"
-            println("Not got city name")
         }
         cityName?.let { getWeatherDetails(it) }
-//        getWeatherDetails("mumbai")
 
         searchIV!!.setOnClickListener {
             cityName = cityEdt!!.text.toString()
             if (cityName!!.isNotEmpty()) {
-                cityNameTV!!.text = cityName
                 getWeatherDetails(cityName!!)
             }else{
                 Toast.makeText(this, "Please enter city name", Toast.LENGTH_SHORT).show()
             }
         }
+
+        cityEdt!!.setOnEditorActionListener { v, actionId, event ->
+            cityName = cityEdt!!.text.toString()
+            if(actionId == EditorInfo.IME_ACTION_DONE){
+                if (cityName!!.isNotEmpty()) {
+                    //hide keyboard
+                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.hideSoftInputFromWindow(v.windowToken, 0)
+                    getWeatherDetails(cityName!!)
+                }else{
+                    Toast.makeText(this, "Please enter city name", Toast.LENGTH_SHORT).show()
+                }
+            }
+            true
+        }
+
+        swipeRefreshLayout.setOnRefreshListener {
+            cityName?.let { it1 -> getWeatherDetails(it1) }
+            swipeRefreshLayout.isRefreshing = false
+        }
+
+        weatherRV!!.addOnLayoutChangeListener(object : View.OnLayoutChangeListener{
+            override fun onLayoutChange(
+                v: View?,
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+                oldLeft: Int,
+                oldTop: Int,
+                oldRight: Int,
+                oldBottom: Int
+            ) {
+                val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val startingHour = 0
+                val position = currentHour - startingHour
+                weatherRV!!.post {
+                    weatherRV!!.scrollToPosition(position)
+                }
+                weatherRV!!.removeOnLayoutChangeListener(this)
+            }
+        })
+
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -128,6 +169,7 @@ class MainActivity : AppCompatActivity() {
             for (address in addresses) {
                 if (address.locality != null && address.locality.isNotEmpty()) {
                     cityName = address.locality
+                    break
                 }else{
                     Toast.makeText(this, "City not found", Toast.LENGTH_SHORT).show()
                 }
@@ -141,46 +183,60 @@ class MainActivity : AppCompatActivity() {
     private fun getWeatherDetails(cityName: String) {
         val url =
             "https://api.weatherapi.com/v1/forecast.json?key=179c6873c8c546b895c152355221407&q=${cityName}&days=1&aqi=no&alerts=no"
-        cityNameTV!!.text = cityName
 
-        val requestQueue = Volley.newRequestQueue(this)
-        val jsonObjectRequest = JsonObjectRequest(Request.Method.GET, url, null,
+        //get weather details
+        val queue = Volley.newRequestQueue(this)
+        val jsonObjectRequest = JsonObjectRequest(
+            Request.Method.GET, url, null,
             { response ->
-
-                val current = response.getJSONObject("current")
-                val tempC = current.getString("temp_c")
-                val condition = current.getJSONObject("condition")
-                val icon = condition.getString("icon")
-                val text = condition.getString("text")
-
-                temperatureTV!!.text = "$tempC°c"
-                conditionTV!!.text = text
-                iconIV!!.setImageURI(Uri.parse("https:$icon"))
-
-                val forecast = response.getJSONObject("forecast")
-                val forecastday = forecast.getJSONArray("forecastday")
-                val day = forecastday.getJSONObject(0)
-                val dayArray = day.getJSONArray("hour")
-                weatherRVModelArrayList!!.clear()
-                for (i in 0 until dayArray.length()) {
-                    val hour = dayArray.getJSONObject(i)
-                    val time = hour.getString("time")
-                    val tempC = hour.getString("temp_c")
-                    val tempF = hour.getString("temp_f")
-                    val windkph = hour.getString("wind_kph")
-                    val condition = hour.getJSONObject("condition")
+                try {
+                    val location = response.getJSONObject("location")
+                    val name = location.getString("name")
+                    val region = location.getString("region")
+                    val country = location.getString("country")
+                    cityNameTV!!.text = "$name, $region, $country"
+                    val current = response.getJSONObject("current")
+                    val condition = current.getJSONObject("condition")
+                    val tempC = current.getString("temp_c")
                     val icon = condition.getString("icon")
                     val text = condition.getString("text")
 
-                    val weatherRVModel = WeatherRVModel(cityName, tempC, windkph, icon, time)
-                    weatherRVModelArrayList!!.add(weatherRVModel)
+                    temperatureTV!!.text = "$tempC°C"
+                    conditionTV!!.text = text
+                    Glide.with(this).load("https://${icon}").into(iconIV!!)
+
+                    val forecast = response.getJSONObject("forecast")
+                    val forecastday = forecast.getJSONArray("forecastday")
+                    val day = forecastday.getJSONObject(0)
+                    val hour = day.getJSONArray("hour")
+
+                    weatherRVModelArrayList!!.clear()
+                    for (i in 0 until hour.length()) {
+                        val jsonObject = hour.getJSONObject(i)
+                        var time = jsonObject.getString("time")
+                        time = time.substring(11, 16)
+                        val tempC = jsonObject.getString("temp_c")
+                        val condition = jsonObject.getJSONObject("condition")
+                        val icon = condition.getString("icon")
+                        val text = condition.getString("text")
+                        val windKph = jsonObject.getString("wind_kph")
+
+                        val weatherRVModel = WeatherRVModel(cityName, tempC, windKph, icon, time)
+                        weatherRVModelArrayList!!.add(weatherRVModel)
+                    }
+
+                    weatherRVAdapter!!.notifyDataSetChanged()
+
+                    homeRL!!.visibility = View.VISIBLE
+                    loadingPB!!.visibility = View.GONE
+                }catch (e: Exception) {
+                    e.printStackTrace()
                 }
-                weatherRVAdapter!!.notifyDataSetChanged()
-                loadingPB!!.visibility = View.GONE
-                homeRL!!.visibility = View.VISIBLE
             },
-            { _ ->
-                Toast.makeText(this, "Please enter valid city name..", Toast.LENGTH_SHORT).show()
-            })
+            { error ->
+                Toast.makeText(this, error.message, Toast.LENGTH_SHORT).show()
+            }
+        )
+        queue.add(jsonObjectRequest)
     }
 }

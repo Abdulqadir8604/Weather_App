@@ -18,23 +18,15 @@ class WeatherRVAdapter(private val context: Context, private val weatherRVModelA
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val model: WeatherRVModel? = weatherRVModelArrayList?.get(position)
-        holder.tempTV?.text = model?.temperature+"°c"
-        holder.conditionIV?.let { Glide.with(context!!).load("http:${model?.icon}").into(it) }
-        holder.windTV?.text = model?.windSpeed+"km/h"
-        val input = SimpleDateFormat("yyyy-MM-dd HH:mm")
-        val output = SimpleDateFormat("hh:mm aa")
-        try {
-            val d = model?.time?.let { input.parse(it) }
-            val formattedTime = output.format(d!!)
-            holder.timeTV?.text = formattedTime
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        val model: WeatherRVModel = weatherRVModelArrayList[position]
+        holder.windTV!!.text = model.windSpeed + "km/h"
+        holder.tempTV!!.text = model.temperature + "°C"
+        holder.timeTV!!.text = model.time
+        Glide.with(context).load("https://${model.icon}").into(holder.conditionIV!!)
     }
 
     override fun getItemCount(): Int {
-        return weatherRVModelArrayList!!.size
+        return weatherRVModelArrayList.size
     }
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -42,7 +34,7 @@ class WeatherRVAdapter(private val context: Context, private val weatherRVModelA
          var tempTV: TextView? = null
          var timeTV: TextView? = null
         var conditionIV: ImageView? = null
-        fun viewHolder(itemView: View) {
+       init {
             windTV = itemView.findViewById(R.id.idTVWindSpeed)
             tempTV = itemView.findViewById(R.id.idTVTemperature)
             timeTV = itemView.findViewById(R.id.idTVTime)
